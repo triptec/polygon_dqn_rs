@@ -1,4 +1,4 @@
-use geo::{LineString, GeometryCollection, Geometry};
+use geo::{LineString, GeometryCollection, Geometry, Coordinate, Point};
 use std::{fs};
 use geojson::{GeoJson, quick_collection};
 
@@ -6,6 +6,8 @@ use geojson::{GeoJson, quick_collection};
 
 
 use geo::algorithm::map_coords::MapCoordsInplace;
+use geo::intersects::Intersects;
+use num_traits::Float;
 
 pub struct Environment {
     pub lines: Vec<LineString<f64>>
@@ -75,6 +77,40 @@ impl Environment {
         Environment{lines}
     }
 
+    fn intersects<T: Float>(linestring1: &LineString<T>, linestring2: &LineString<T>) -> bool {
+        if linestring1.0.is_empty() || linestring2.0.is_empty() {
+            return false;
+        }
+        for a in linestring1.lines() {
+            for b in linestring2.lines() {
+                let u_b = b.dy() * a.dx() - b.dx() * a.dy();
+                if u_b == T::zero() {
+                    continue;
+                }
+                let ua_t = b.dx() * (a.start.y - b.start.y) - b.dy() * (a.start.x - b.start.x);
+                let ub_t = a.dx() * (a.start.y - b.start.y) - a.dy() * (a.start.x - b.start.x);
+                let u_a = ua_t / u_b;
+                let u_b = ub_t / u_b;
+                if (T::zero() <= u_a)
+                    && (u_a <= T::one())
+                    && (T::zero() <= u_b)
+                    && (u_b <= T::one())
+                {
+                    return true;
+                    //return Some(Point(Coordinate{x: a1_x + u_a * (a2_x - a1_x), y:a1_y + u_a * (a2_y - a1_y)}));
+                }
+            }
+        }
+        false
+    }
+
+    pub fn get_state(&self, rays: Vec<LineString<f64>>) {
+        for ray in rays.iter() {
+            for line in self.lines.iter() {
+                line.intersects(ray);
+            }
+        }
+    }
 }
 
 fn main() {
