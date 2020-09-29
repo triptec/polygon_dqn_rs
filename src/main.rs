@@ -2,7 +2,10 @@ use geo::{LineString, GeometryCollection, Geometry, Point, Coordinate, Line};
 use std::{fs};
 use geojson::{GeoJson, quick_collection};
 use rand::prelude::*;
-
+use sdl2::pixels::Color;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use std::time::Duration;
 use geo::algorithm::map_coords::MapCoordsInplace;
 use geo::intersects::Intersects;
 use num_traits::Float;
@@ -10,7 +13,7 @@ use geo::algorithm::euclidean_distance::EuclideanDistance;
 pub struct Environment {
     pub lines: Vec<LineString<f64>>
 }
-
+use rayon::prelude::*;
 pub struct Ray {
     pub angle: f64,
     pub length: f64,
@@ -47,12 +50,12 @@ pub struct Agent {
 impl Agent {
     pub fn new(position: Point<f64>, direction: f64) -> Agent {
         Agent{
-            speed: 0.01,
+            speed: 0.0008,
             position,
             direction,
-            ray_count: 30.0,
-            fov: 4.0,
-            visibility: 0.5,
+            ray_count: 90.0,
+            fov: 0.4,
+            visibility: 0.1,
             rays: vec![]
         }
     }
@@ -68,11 +71,11 @@ impl Agent {
 
     pub fn step(&mut self, direction_change: f64) {
         self.direction += direction_change;
-        self.cast_rays();
         self.position = Point::new(
             self.position.x() + self.speed * self.direction.cos(),
             self.position.y() + self.speed * self.direction.sin(),
-        )
+        );
+        self.cast_rays();
     }
 }
 
@@ -117,47 +120,7 @@ impl Environment {
         for line in lines.iter_mut() {
             line.map_coords_inplace(|&(x, y)| ((x - xmin) / scalex, (y - ymin) / scaley));
         }
-        /*
-
-        dbg!(xmin, ymin, xmax, ymax, scalex, scaley);
-        xmin = 999.9;
-        ymin = 999.9;
-        xmax = 0.0;
-        ymax = 0.0;
-        for line in lines.iter() {
-            for point in line.points_iter() {
-                xmin = xmin.min(point.x());
-                ymin = ymin.min(point.y());
-                xmax = xmax.max(point.x());
-                ymax = ymax.max(point.y());
-            }
-        }
-        dbg!(xmin, ymin, xmax, ymax, scalex, scaley);
-
-        dbg!(&lines);
-        
-         */
         Environment { lines }
-    }
-    fn intersect(line1: &Line<f64>, line2: &Line<f64>) -> Option<Point<f64>> {
-        let a1 = line1.end.y - line1.start.y;
-        let b1 = line1.start.x - line1.end.x;
-        let c1 = a1 * line1.start.x + b1 * line1.start.y;
-
-        let a2 = line2.end.y - line2.start.y;
-        let b2 = line2.start.x - line2.end.x;
-        let c2 = a2 * line2.start.x + b2 * line2.start.y;
-
-        let delta = a1 * b2 - a2 * b1;
-
-        if delta == 0.0 {
-            return None;
-        }
-
-        Some(Point::new(
-            (b2 * c1 - b1 * c2) / delta,
-            (a1 * c2 - a2 * c1) / delta
-        ))
     }
 
     fn intersections(linestring1: &LineString<f64>, linestring2: &LineString<f64>) -> Vec<Point<f64>> {
@@ -167,9 +130,11 @@ impl Environment {
         }
         for a in linestring1.lines() {
             for b in linestring2.lines() {
-                match Environment::intersect(&a, &b) {
-                    Some(x) => intersections.push(x),
-                    None => {}
+                let a_li = LineInterval::line_segment(a.clone());
+                let b_li = LineInterval::line_segment(b.clone());
+                match a_li.relate(&b_li) {
+                    LineRelation::DivergentIntersecting(x) => intersections.push(x.clone()),
+                    _ => {}
                 }
             }
         }
@@ -191,21 +156,125 @@ impl Environment {
         }
     }
 }
+use sdl2::rect;
+use line_intersection::{LineInterval, LineRelation};
 
-fn main() {
+fn main() -> Result<(), String> {
+    let scalex = 1000.0;
+    let scaley = 1000.0;
+    let min_distance_to_obstacle = 0.005;
+    let mut last_distance_to_obstacle = 0.0;
     let mut _env = Environment::new();
-    let mut agent = Agent::new(Point::new(0.5, 0.5), 2.0);
+    let mut agent = Agent::new(Point::new(0.45, 0.55), 2.0);
     agent.cast_rays();
     let mut direction_change = 0.0;
-    loop {
+
+
+    let sdl_context = sdl2::init()?;
+    let video_subsystem = sdl_context.video()?;
+
+    let window = video_subsystem.window("rust-sdl2 demo: Video", 1000, 1000)
+        .position_centered()
+        .opengl()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
+
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+    canvas.present();
+    let mut event_pump = sdl_context.event_pump()?;
+
+    'running: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running
+                },
+                _ => {}
+            }
+        }
+
+        canvas.set_draw_color(Color::RGB(0, 0, 0));
+        canvas.clear();
+        canvas.set_draw_color(Color::RGB(0, 0, 255));
+
         let distance = agent.rays.iter().map(|x| x.length).fold(1000.0, |a, b| a.min(b));
-        if distance < 0.1 {
-            direction_change += rand::random::<f64>() - 0.5;
+
+        if distance < min_distance_to_obstacle {
+            agent.speed = 0.0001;
+            if distance > last_distance_to_obstacle {
+                last_distance_to_obstacle = distance;
+                direction_change = 0.0;
+            } else {
+                last_distance_to_obstacle = distance;
+                direction_change += rand::random::<f64>() - 0.5;
+            }
         } else {
+            agent.speed = 0.0008;
             direction_change = 0.0;
         }
         agent.step(direction_change);
+
+        for ray in &agent.rays {
+            canvas.draw_line(rect::Point::new((ray.line_string.0[0].x * scalex) as i32, (ray.line_string.0[0].y * scaley) as i32), rect::Point::new((ray.line_string.0[1].x * scalex) as i32, (ray.line_string.0[1].y * scaley) as i32));
+        }
+
         _env.update_state(&mut agent);
+
+        canvas.set_draw_color(Color::RGB(255, 0, 0));
+
+        for ray in &agent.rays {
+            canvas.draw_line(rect::Point::new((ray.line_string.0[0].x * scalex) as i32, (ray.line_string.0[0].y * scaley) as i32), rect::Point::new((ray.line_string.0[1].x * scalex) as i32, (ray.line_string.0[1].y * scaley) as i32));
+        }
+
+        canvas.set_draw_color(Color::RGB(0, 255, 0));
+
+        for line in &_env.lines {
+            for line_segment in line.lines() {
+                canvas.draw_line(
+                    rect::Point::new(
+                        (line_segment.start.x * scalex) as i32,
+                        (line_segment.start.y * scaley) as i32,
+                    ),
+                    rect::Point::new(
+                        (line_segment.end.x * scalex) as i32,
+                        (line_segment.end.y * scaley) as i32,
+                    )
+                );
+            }
+        }
+
+        canvas.present();
+        //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
     }
-    println!("Hello, world!");
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use line_intersection::{LineInterval, LineRelation};
+
+    #[test]
+    fn test_intersect2() {
+        let line1 = Line::new(Coordinate { x: 0., y: 0. }, Coordinate { x: 1., y: 1. });
+        let line2 = Line::new(Coordinate { x: 1., y: 0. }, Coordinate { x: 0., y: 1. });
+        let s1 = LineInterval::line_segment(line1);
+        let s2 = LineInterval::line_segment(line2);
+        let relation = LineRelation::DivergentIntersecting((0.5, 0.5).into());
+        assert_eq!(relation, s1.relate(&s2));
+        assert_eq!(relation, s2.relate(&s1));
+        let line1 = Line::new(Coordinate { x: 0., y: 0. }, Coordinate { x: 1., y: 1. });
+        let line2 = Line::new(Coordinate { x: -1., y: 0. }, Coordinate { x: 0., y: -1. });
+        let s1 = LineInterval::line_segment(line1);
+        let s2 = LineInterval::line_segment(line2);
+        let relation = LineRelation::DivergentDisjoint;
+        assert_eq!(relation, s1.relate(&s2));
+        assert_eq!(relation, s2.relate(&s1));
+
+    }
+
 }

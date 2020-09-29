@@ -1,0 +1,3 @@
+[submodule "line_intersection"]
+	path = line_intersection
+	url = git@github.com:triptec/line_intersection.git
