@@ -1,8 +1,12 @@
+#![feature(test)]
+extern crate test;
+
 use geo::Point;
 
 use sdl2::pixels::Color;
 
 use num_traits::Float;
+
 
 extern crate geo;
 extern crate sdl2;
@@ -53,13 +57,18 @@ fn main() -> Result<(), String> {
 
         renderer.clear();
 
+        renderer.render_line_strings(&_env.line_strings.iter().map(|ls| ls).collect(), Color::RGB(0, 255, 0));
+
+        let culled = Env::find_culled(&agent.rays, &_env.line_strings, agent.position);
+        renderer.render_line_strings(&culled, Color::RGB(255, 0, 255));
+
         renderer.render_rays(&agent.rays, Color::RGB(0, 0, 255));
 
         _env.update_state(&mut agent);
 
         renderer.render_rays(&agent.rays, Color::RGB(255, 0, 0));
 
-        renderer.render_lines(&_env.lines, Color::RGB(0, 255, 0));
+
 
         renderer.present();
         //::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));

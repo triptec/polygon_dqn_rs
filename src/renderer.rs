@@ -1,6 +1,6 @@
 use crate::ray::Ray;
 use core::option::Option::Some;
-use geo::LineString;
+use geo::{LineString, Line};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -63,36 +63,46 @@ impl Renderer {
         self.canvas.clear();
     }
 
-    pub fn render_rays<C: Into<pixels::Color>>(&mut self, rays: &Vec<Ray>, color: C) {
-        self.canvas.set_draw_color(color);
+    pub fn render_rays<C: Clone + Into<pixels::Color>>(&mut self, rays: &Vec<Ray>, color: C) {
         for ray in rays {
-            self.canvas.draw_line(
-                rect::Point::new(
-                    (ray.line_string.0[0].x * self.scalex) as i32,
-                    (ray.line_string.0[0].y * self.scaley) as i32,
-                ),
-                rect::Point::new(
-                    (ray.line_string.0[1].x * self.scalex) as i32,
-                    (ray.line_string.0[1].y * self.scaley) as i32,
-                ),
-            ).unwrap();
+            self.render_lines(&ray.line_string.lines().into_iter().collect(), color.clone());
         }
     }
 
-    pub fn render_lines<C: Into<pixels::Color>>(&mut self, lines: &Vec<LineString<f64>>, color: C) {
+    pub fn render_lines<C: Into<pixels::Color>>(&mut self, lines: &Vec<Line<f64>>, color: C) {
+        self.canvas.set_draw_color(color);
+        for line in lines {
+            self.canvas
+                .draw_line(
+                    rect::Point::new(
+                        (line.start.x * self.scalex) as i32,
+                        (line.start.y * self.scaley) as i32,
+                    ),
+                    rect::Point::new(
+                        (line.end.x * self.scalex) as i32,
+                        (line.end.y * self.scaley) as i32,
+                    ),
+                )
+                .unwrap();
+        }
+    }
+
+    pub fn render_line_strings<C: Into<pixels::Color>>(&mut self, lines: &Vec<&LineString<f64>>, color: C) {
         self.canvas.set_draw_color(color);
         for line in lines {
             for line_segment in line.lines() {
-                self.canvas.draw_line(
-                    rect::Point::new(
-                        (line_segment.start.x * self.scalex) as i32,
-                        (line_segment.start.y * self.scaley) as i32,
-                    ),
-                    rect::Point::new(
-                        (line_segment.end.x * self.scalex) as i32,
-                        (line_segment.end.y * self.scaley) as i32,
-                    ),
-                ).unwrap();
+                self.canvas
+                    .draw_line(
+                        rect::Point::new(
+                            (line_segment.start.x * self.scalex) as i32,
+                            (line_segment.start.y * self.scaley) as i32,
+                        ),
+                        rect::Point::new(
+                            (line_segment.end.x * self.scalex) as i32,
+                            (line_segment.end.y * self.scaley) as i32,
+                        ),
+                    )
+                    .unwrap();
             }
         }
     }
