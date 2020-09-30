@@ -1,4 +1,4 @@
-use geo::{LineString, Coordinate, Point};
+use geo::{Coordinate, LineString, Point};
 
 pub struct Ray {
     pub angle: f64,
@@ -16,10 +16,15 @@ impl Ray {
             max_length: 0.0,
             player_angle,
             line_string: LineString(vec![
-                Coordinate {x: player_position.x(), y: player_position.y()},
-                Coordinate {x: player_position.x() + length * (player_angle + angle).cos(), y: player_position.y() + length * (player_angle + angle).sin()},
+                Coordinate {
+                    x: player_position.x(),
+                    y: player_position.y(),
+                },
+                Coordinate {
+                    x: player_position.x() + length * (player_angle + angle).cos(),
+                    y: player_position.y() + length * (player_angle + angle).sin(),
+                },
             ]),
         }
     }
 }
-

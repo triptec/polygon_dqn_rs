@@ -1,5 +1,5 @@
-use geo::Point;
 use crate::ray::Ray;
+use geo::Point;
 
 pub struct Agent {
     pub speed: f64,
@@ -13,14 +13,14 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(position: Point<f64>, direction: f64) -> Agent {
-        Agent{
+        Agent {
             speed: 0.0004,
             position,
             direction,
             ray_count: 20.0,
             fov: 0.4,
             visibility: 0.1,
-            rays: vec![]
+            rays: vec![],
         }
     }
 
@@ -29,7 +29,12 @@ impl Agent {
         for i in 0..self.ray_count as i32 {
             let x = i as f64 / self.ray_count - 0.5;
             let angle = x.atan2(self.fov);
-            self.rays.push(Ray::new(angle, self.visibility, self.direction, self.position.clone()))
+            self.rays.push(Ray::new(
+                angle,
+                self.visibility,
+                self.direction,
+                self.position,
+            ))
         }
     }
 
@@ -42,4 +47,3 @@ impl Agent {
         self.cast_rays();
     }
 }
-
