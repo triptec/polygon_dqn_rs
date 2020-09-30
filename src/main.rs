@@ -58,7 +58,7 @@ fn main() -> Result<(), String> {
 
         renderer.render_line_strings(&_env.line_strings.iter().collect(), Color::RGB(0, 255, 0));
 
-        let culled = Env::find_culled(&agent.rays, &_env.line_strings, agent.position);
+        let culled = Env::cull_line_strings(&agent.rays, &_env.line_strings, agent.position);
         renderer.render_line_strings(&culled, Color::RGB(255, 0, 255));
 
         renderer.render_rays(&agent.rays, Color::RGB(0, 0, 255));

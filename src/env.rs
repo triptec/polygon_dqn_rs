@@ -3,7 +3,7 @@ use crate::ray::Ray;
 use geo::euclidean_distance::EuclideanDistance;
 use geo::intersects::Intersects;
 use geo::map_coords::MapCoordsInplace;
-use geo::{Geometry, GeometryCollection, LineString, Point, Polygon};
+use geo::{Geometry, GeometryCollection, LineString, Point, Polygon, Line};
 use geojson::{quick_collection, GeoJson};
 use line_intersection::{LineInterval, LineRelation};
 use rayon::prelude::*;
@@ -125,7 +125,7 @@ impl Env {
 
     pub fn update_state(&self, agent: &mut Agent) {
         let intersecting_line_strings =
-            Env::find_culled(&mut agent.rays, &self.line_strings, agent.position);
+            Env::cull_line_strings(&mut agent.rays, &self.line_strings, agent.position);
         Env::find_intersections_seq(&mut agent.rays, &intersecting_line_strings, agent.position)
     }
 
@@ -146,7 +146,38 @@ impl Env {
         }
     }
 
-    pub fn find_culled<'a>(
+    pub fn find_line_intersections_seq(
+        rays: &mut Vec<Ray>,
+        lines: &Vec<&Line<f64>>,
+        origin_position: Point<f64>,
+    ) {
+        rays.iter_mut()
+            .for_each(|ray| Env::find_line_intersection(ray, lines, origin_position));
+    }
+
+
+    pub fn find_line_intersection(
+        ray: &mut Ray,
+        lines: &Vec<&Line<f64>>,
+        origin_position: Point<f64>,
+    ) {
+        for line in lines.iter() {
+            let a_li = LineInterval::line_segment(ray.line.clone());
+            let b_li = LineInterval::line_segment((*line).clone());
+            let intersection = match a_li.relate(&b_li) {
+                LineRelation::DivergentIntersecting(x) => x,
+                _ => {break}
+            };
+            let length = intersection.euclidean_distance(&origin_position);
+            if length < ray.length {
+                ray.length = length;
+                ray.line = Line::new(ray.line.start, intersection.0)
+            }
+        }
+    }
+
+
+    pub fn cull_line_strings<'a>(
         rays: &Vec<Ray>,
         line_strings: &'a Vec<LineString<f64>>,
         origin_position: Point<f64>,
@@ -174,6 +205,33 @@ impl Env {
         intersecting_line_strings
     }
 
+    pub fn cull_lines<'a>(
+        rays: &Vec<Ray>,
+        lines: &'a Vec<Line<f64>>,
+        origin_position: Point<f64>,
+    ) -> Vec<&'a Line<f64>> {
+        let polygon = Polygon::new(
+            LineString::from(vec![
+                origin_position.x_y(), // origin
+                rays[0].line.end.x_y(),
+                rays[(rays.len() as f64 / 2.0).floor() as usize].line
+                    .end
+                    .x_y(),
+                rays[rays.len() - 1].line.end.x_y(),
+                origin_position.x_y(), // origin
+            ]),
+            vec![],
+        );
+
+        let mut intersecting_lines = vec![];
+        for line in lines.iter() {
+            if polygon.intersects(line) {
+                intersecting_lines.push(line)
+            }
+        }
+        intersecting_lines
+    }
+
     pub fn find_intersections_seq(
         rays: &mut Vec<Ray>,
         line_strings: &Vec<&LineString<f64>>,
@@ -197,8 +255,35 @@ impl Env {
 mod tests {
     use crate::env::Env;
     use crate::ray::Ray;
-    use geo::Point;
+    use geo::{Point, Line};
     use test::Bencher;
+
+    #[test]
+    fn test_line_intersections() {
+        let position = Point::new(0.5, 0.5);
+        let mut rays = Ray::generate_rays(180.0, 0.4, 0.3, 0.0, position);
+        let (line_strings, _scalex, _scaley) = Env::get_line_strings();
+
+        /*
+        let mut ray_lines: Vec<Line<f64>> = vec![];
+        for ray in rays {
+            for line in ray.line_string.lines() {
+                ray_lines.push(line.clone())
+            }
+        }*/
+
+        let mut lines: Vec<Line<f64>> = vec![];
+        for line_string in line_strings {
+            for line in line_string.lines() {
+                lines.push(line.clone())
+            }
+        }
+        dbg!(lines.len());
+        let intersecting_lines = Env::cull_lines(&mut rays, &lines, position);
+        dbg!(intersecting_lines.len());
+        Env::find_line_intersections_seq(&mut rays, &intersecting_lines, position)
+    }
+
 
     #[test]
     fn test_intersections() {
@@ -206,8 +291,26 @@ mod tests {
         let mut rays = Ray::generate_rays(180.0, 0.4, 0.3, 0.0, position);
         let (line_strings, _scalex, _scaley) = Env::get_line_strings();
 
-        let intersecting_line_strings = Env::find_culled(&mut rays, &line_strings, position);
+        let intersecting_line_strings = Env::cull_line_strings(&mut rays, &line_strings, position);
         Env::find_intersections_seq(&mut rays, &intersecting_line_strings, position)
+    }
+
+    #[bench]
+    fn test_calc_line_intersections(b: &mut Bencher) {
+        let position = Point::new(0.5, 0.5);
+        let mut rays = Ray::generate_rays(180.0, 0.4, 0.3, 0.0, position);
+        let (line_strings, _scalex, _scaley) = Env::get_line_strings();
+
+        let mut lines: Vec<Line<f64>> = vec![];
+        for line_string in line_strings {
+            for line in line_string.lines() {
+                lines.push(line.clone())
+            }
+        }
+        b.iter(|| {
+            let intersecting_lines = Env::cull_lines(&mut rays, &lines, position);
+            Env::find_line_intersections_seq(&mut rays, &intersecting_lines, position)
+        });
     }
 
     #[bench]
@@ -233,7 +336,7 @@ mod tests {
         let mut rays = Ray::generate_rays(180.0, 0.4, 0.3, 0.0, position);
         let (line_strings, _scalex, _scaley) = Env::get_line_strings();
         b.iter(|| {
-            let intersecting_line_strings = Env::find_culled(&mut rays, &line_strings, position);
+            let intersecting_line_strings = Env::cull_line_strings(&mut rays, &line_strings, position);
             Env::find_intersections_par(&mut rays, &intersecting_line_strings, position)
         });
     }
@@ -244,7 +347,7 @@ mod tests {
         let mut rays = Ray::generate_rays(180.0, 0.4, 0.3, 0.0, position);
         let (line_strings, _scalex, _scaley) = Env::get_line_strings();
         b.iter(|| {
-            let intersecting_line_strings = Env::find_culled(&mut rays, &line_strings, position);
+            let intersecting_line_strings = Env::cull_line_strings(&mut rays, &line_strings, position);
             Env::find_intersections_seq(&mut rays, &intersecting_line_strings, position)
         });
     }

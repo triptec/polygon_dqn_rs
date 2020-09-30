@@ -1,10 +1,11 @@
-use geo::{Coordinate, LineString, Point};
+use geo::{Coordinate, LineString, Point, Line};
 
 pub struct Ray {
     pub angle: f64,
     pub length: f64,
     pub max_length: f64,
     pub line_string: LineString<f64>,
+    pub line: Line<f64>,
 }
 
 impl Ray {
@@ -23,6 +24,16 @@ impl Ray {
                     y: position.y() + length * (center_angle + angle).sin(),
                 },
             ]),
+            line: Line::new(
+                Coordinate {
+                    x: position.x(),
+                    y: position.y(),
+                },
+                Coordinate {
+                    x: position.x() + length * (center_angle + angle).cos(),
+                    y: position.y() + length * (center_angle + angle).sin(),
+                }
+            ),
         }
     }
 
