@@ -1,6 +1,6 @@
 use crate::ray::Ray;
 use core::option::Option::Some;
-use geo::{LineString, Line};
+use geo::{Line, LineString};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -65,7 +65,10 @@ impl Renderer {
 
     pub fn render_rays<C: Clone + Into<pixels::Color>>(&mut self, rays: &Vec<Ray>, color: C) {
         for ray in rays {
-            self.render_lines(&ray.line_string.lines().into_iter().collect(), color.clone());
+            self.render_lines(
+                &ray.line_string.lines().into_iter().collect(),
+                color.clone(),
+            );
         }
     }
 
@@ -87,7 +90,11 @@ impl Renderer {
         }
     }
 
-    pub fn render_line_strings<C: Into<pixels::Color>>(&mut self, lines: &Vec<&LineString<f64>>, color: C) {
+    pub fn render_line_strings<C: Into<pixels::Color>>(
+        &mut self,
+        lines: &Vec<&LineString<f64>>,
+        color: C,
+    ) {
         self.canvas.set_draw_color(color);
         for line in lines {
             for line_segment in line.lines() {

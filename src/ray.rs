@@ -26,17 +26,18 @@ impl Ray {
         }
     }
 
-    pub fn generate_rays(ray_count: f64, fov: f64, length: f64, direction: f64, position: Point<f64>) -> Vec<Ray> {
+    pub fn generate_rays(
+        ray_count: f64,
+        fov: f64,
+        length: f64,
+        direction: f64,
+        position: Point<f64>,
+    ) -> Vec<Ray> {
         let mut rays = vec![];
         for i in 0..ray_count as i32 {
             let x = i as f64 / ray_count - 0.5;
             let angle = x.atan2(fov);
-            rays.push(Ray::new(
-                angle,
-                length,
-                direction,
-                position,
-            ))
+            rays.push(Ray::new(angle, length, direction, position))
         }
         rays
     }

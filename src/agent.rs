@@ -26,10 +26,14 @@ impl Agent {
 
     pub fn cast_rays(&mut self) {
         self.rays.clear();
-        self.rays = Ray::generate_rays(self.ray_count, self.fov, self.visibility, self.direction, self.position)
+        self.rays = Ray::generate_rays(
+            self.ray_count,
+            self.fov,
+            self.visibility,
+            self.direction,
+            self.position,
+        )
     }
-
-
 
     pub fn step(&mut self, direction_change: f64) {
         self.direction += direction_change;
